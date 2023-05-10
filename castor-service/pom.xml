@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  ~ Copyright (c) 2023 - for information on the respective copyright owner
+  ~ Copyright (c) 2021-2023 - for information on the respective copyright owner
   ~ see the NOTICE file and/or the repository https://github.com/carbynestack/castor.
   ~
   ~ SPDX-License-Identifier: Apache-2.0
@@ -133,12 +133,6 @@
             <artifactId>tomcat-embed-core</artifactId>
             <version>${tomcat-embed.version}</version>
         </dependency>
-        <dependency>
-            <!-- enforce version to avoid vulnerabilities-->
-            <groupId>org.apache.tomcat.embed</groupId>
-            <artifactId>tomcat-embed-websocket</artifactId>
-            <version>${tomcat-embed.version}</version>
-        </dependency>
 
         <dependency>
             <groupId>io.vavr</groupId>
@@ -168,14 +162,6 @@
             <artifactId>spring-boot-starter-log4j2</artifactId>
         </dependency>
         <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-websocket</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-validation</artifactId>
-        </dependency>
-        <dependency>
             <groupId>org.springframework.session</groupId>
             <artifactId>spring-session</artifactId>
             <version>${spring-framework-session.version}</version>
@@ -187,10 +173,6 @@
         <dependency>
             <groupId>io.micrometer</groupId>
             <artifactId>micrometer-registry-prometheus</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -222,10 +204,19 @@
             <version>${minio-sdk.version}</version>
         </dependency>
 
-        <!-- use spring-security to avoid jackson vulnerabilities -->
         <dependency>
             <groupId>org.springframework.security</groupId>
-            <artifactId>spring-security-web</artifactId>
+            <artifactId>spring-security-core</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-config</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-crypto</artifactId>
         </dependency>
 
         <!--PostgreSQL Driver-->

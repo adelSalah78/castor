@@ -1,0 +1,8 @@
+syntax = "proto3";
+package io.carbynestack.castor.common.grpc;
+
+option go_package = "common.grpc";
+
+message GrpcEmpty{
+
+}

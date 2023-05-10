@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023 - for information on the respective copyright owner
+ * Copyright (c) 2022-2023 - for information on the respective copyright owner
  * see the NOTICE file and/or the repository https://github.com/carbynestack/castor.
  *
  * SPDX-License-Identifier: Apache-2.0
@@ -11,8 +11,7 @@ import static io.carbynestack.castor.common.entities.ActivationStatus.LOCKED;
 import static io.carbynestack.castor.common.entities.ActivationStatus.UNLOCKED;
 import static io.carbynestack.castor.service.persistence.fragmentstore.TupleChunkFragmentStorageService.CONFLICT_EXCEPTION_MSG;
 import static java.util.Collections.singletonList;
-import static org.junit.jupiter.api.Assertions.*;
-import static org.springframework.boot.test.context.SpringBootTest.WebEnvironment.RANDOM_PORT;
+import static org.junit.Assert.*;
 
 import io.carbynestack.castor.common.entities.TupleType;
 import io.carbynestack.castor.common.exceptions.CastorClientException;
@@ -26,15 +25,16 @@ import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.runner.RunWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
-@SpringBootTest(
-    webEnvironment = RANDOM_PORT,
-    classes = {CastorServiceApplication.class})
+@RunWith(SpringJUnit4ClassRunner.class)
+@SpringBootTest(classes = {CastorServiceApplication.class})
 @ActiveProfiles("test")
 @Testcontainers
 public class TupleChunkFragmentStorageServiceIT {

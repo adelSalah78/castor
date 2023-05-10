@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package io.carbynestack.castor.common.grpc;
+
+import "common.proto";
+import "telemetry.proto";
+import "tuple_chunk.proto";
+import "tuples.proto";
+import "tuples_upload.proto";
+
+option go_package = "common.grpc";
+
+service IntraService {
+  rpc GetTelemetryData(GrpcTelemetryDataRequest)
+      returns(GrpcTelemetryDataResponse);
+  rpc ActivateFragmentsForTupleChunk(GrpcTupleChunkRequest)
+      returns(GrpcEmpty);
+  rpc GetTupleList(GrpcTuplesListRequest)
+      returns(GrpcTuplesListResponse);
+  rpc UploadTupleChunk(GrpcUploadTupleChunkRequest)
+      returns(GrpcUploadTupleChunkResponse);
+}

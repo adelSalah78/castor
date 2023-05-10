@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021 - for information on the respective copyright owner
+ * Copyright (c) 2021-2023 - for information on the respective copyright owner
  * see the NOTICE file and/or the repository https://github.com/carbynestack/castor.
  *
  * SPDX-License-Identifier: Apache-2.0
@@ -22,6 +22,10 @@ public class CastorServiceException extends RuntimeException {
    */
   public CastorServiceException(String message) {
     super(message);
+  }
+
+  public CastorServiceException(String message, Exception e) {
+    super(message, e);
   }
 
   /**

@@ -1,0 +1,16 @@
+syntax = "proto3";
+package io.carbynestack.castor.common.grpc;
+
+option go_package = "common.grpc";
+
+message GrpcUploadTupleChunkRequest{
+  string chunk_id = 1;
+  string tuple_type = 2;
+  bytes tuples = 3;
+}
+
+message GrpcUploadTupleChunkResponse{
+  string uuid = 1;
+  string error_message = 2;
+  bool is_success = 3;
+}

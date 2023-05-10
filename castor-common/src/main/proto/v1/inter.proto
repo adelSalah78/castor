@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package io.carbynestack.castor.common.grpc;
+
+import "common.proto";
+import "reservation.proto";
+
+option java_multiple_files = true;
+
+service InterService {
+  rpc KeepAndApplyReservation(GrpcReservation) returns(GrpcEmpty);
+  rpc UpdateReservation(GrpcUpdateReservationRequest) returns(GrpcEmpty);
+}

@@ -1,228 +1,161 @@
 /*
- * Copyright (c) 2023 - for information on the respective copyright owner
+ * Copyright (c) 2021-2023 - for information on the respective copyright owner
  * see the NOTICE file and/or the repository https://github.com/carbynestack/castor.
  *
  * SPDX-License-Identifier: Apache-2.0
  */
 package io.carbynestack.castor.client.download;
 
-import static io.carbynestack.castor.client.download.DefaultCastorIntraVcpClient.FAILED_DOWNLOADING_TUPLES_EXCEPTION_MSG;
-import static io.carbynestack.castor.client.download.DefaultCastorIntraVcpClient.FAILED_FETCHING_TELEMETRY_DATA_EXCEPTION_MSG;
-import static io.carbynestack.castor.common.CastorServiceUri.MUST_NOT_BE_EMPTY_EXCEPTION_MSG;
-import static io.carbynestack.castor.common.entities.Field.GFP;
-import static java.util.Collections.singletonList;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static io.carbynestack.castor.client.download.ClientBuilderSupport.ADDRESSES_MUST_NOT_BE_EMPTY_EXCEPTION_MSG;
+import static org.junit.Assert.*;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-import io.carbynestack.castor.common.BearerTokenProvider;
-import io.carbynestack.castor.common.CastorServiceUri;
 import io.carbynestack.castor.common.entities.*;
+import io.carbynestack.castor.common.entities.TupleChunk;
 import io.carbynestack.castor.common.exceptions.CastorClientException;
-import io.carbynestack.httpclient.CsHttpClient;
-import io.carbynestack.httpclient.CsHttpClientException;
-import io.carbynestack.httpclient.CsResponseEntity;
-import java.io.File;
-import java.net.URI;
-import java.nio.file.Files;
+import io.carbynestack.castor.common.grpc.*;
 import java.util.ArrayList;
-import java.util.Collections;
+import java.util.List;
 import java.util.UUID;
-import lombok.SneakyThrows;
-import org.apache.http.HttpStatus;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.MockedConstruction;
+import java.util.concurrent.TimeUnit;
+import org.junit.Assert;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.mockito.MockedStatic;
 import org.mockito.Mockito;
-import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.MockitoJUnitRunner;
 
-@ExtendWith(MockitoExtension.class)
-class DefaultCastorIntraVcpClientTest {
-  private final Share testShare =
-      new Share(
-          new byte[] {1, 4, 72, -56, -22, -12, 72, 88, 109, 42, -27, 56, 109, 42, -27, 56},
-          new byte[] {1, 4, 72, -56, -22, -12, 72, 88, 109, 42, -27, 56, 109, 42, -27, 56});
+@RunWith(MockitoJUnitRunner.class)
+public class DefaultCastorIntraVcpClientTest {
 
-  private final CsHttpClient<String> csHttpClientMock;
-  private final String serviceAddress = "https://castor.carbynestack.io:8080";
+  private IntraServiceGrpc.IntraServiceBlockingStub stub;
 
-  private final CastorIntraVcpClient castorIntraVcpClient;
+  private CastorIntraVcpClient castorIntraVcpClient;
 
-  public DefaultCastorIntraVcpClientTest() {
-    csHttpClientMock = mock(CsHttpClient.class);
-    castorIntraVcpClient =
-        new DefaultCastorIntraVcpClient(
-            DefaultCastorIntraVcpClient.builder(serviceAddress), csHttpClientMock);
+  MockedStatic<DefaultCastorInterVcpClient> clientUtilities;
+  MockedStatic<Utils> protoUtils;
+
+  final byte[] arr = {
+    12, 67, 45, -2, 32, 4, 5, 6, 7, 8, 9, 56, 12, 45, 21, 45, 12, 67, 45, -2, 32, 4, 5, 6, 7, 8, 9,
+    56, 12, 45, 21, 45
+  };
+
+  long DEFAULT_CONNECTION_TIMEOUT = 60000L;
+
+  public DefaultCastorIntraVcpClientTest() {}
+
+  void init() {
+    clientUtilities = Mockito.mockStatic(DefaultCastorInterVcpClient.class);
+    protoUtils = Mockito.mockStatic(Utils.class);
+
+    stub = mock(IntraServiceGrpc.IntraServiceBlockingStub.class);
+    castorIntraVcpClient = new DefaultCastorIntraVcpClient(stub);
+  }
+
+  void close() {
+    clientUtilities.close();
+    protoUtils.close();
   }
 
   @Test
-  void givenServiceAddressIsNull_whenGetBuilderInstance_thenThrowIllegalArgumentException() {
+  public void givenServiceAddressIsNull_whenGetBuilderInstance_thenThrowIllegalArgumentException() {
     IllegalArgumentException actualIae =
         assertThrows(
-            IllegalArgumentException.class,
-            () -> DefaultCastorIntraVcpClient.builder(null).build());
-    assertEquals(MUST_NOT_BE_EMPTY_EXCEPTION_MSG, actualIae.getMessage());
+            IllegalArgumentException.class, () -> DefaultCastorIntraVcpClient.builder(null));
+    assertEquals(ADDRESSES_MUST_NOT_BE_EMPTY_EXCEPTION_MSG, actualIae.getMessage());
   }
 
-  @SneakyThrows
   @Test
-  void givenSslConfiguration_whenBuildClient_thenInitializeCsHttpClientAccordingly() {
-    CastorServiceUri serviceUri = new CastorServiceUri(serviceAddress);
-    String expectedBearerToken = "testBearerToken";
-    BearerTokenProvider expectedBearerTokenProvider =
-        BearerTokenProvider.builder().bearerToken(serviceUri, expectedBearerToken).build();
-    File expectedTrustedCertificateFile =
-        Files.createTempFile("testCertificateFile", "pem").toFile();
-    try (MockedConstruction<CsHttpClient> mockedConstruction =
-        Mockito.mockConstruction(
-            CsHttpClient.class,
-            (csHttpClient1, context) -> {
-              assertEquals(true, context.arguments().get(2));
-              assertEquals(
-                  singletonList(expectedTrustedCertificateFile), context.arguments().get(3));
-            })) {
-      DefaultCastorIntraVcpClient actualCastorDownloadClient =
-          DefaultCastorIntraVcpClient.builder(serviceAddress)
-              .withoutSslCertificateValidation()
-              .withBearerTokenProvider(expectedBearerTokenProvider)
-              .withTrustedCertificate(expectedTrustedCertificateFile)
-              .build();
-      assertEquals(
-          new CastorServiceUri(serviceAddress), actualCastorDownloadClient.getServiceUri());
-      assertEquals(
-          expectedBearerTokenProvider, actualCastorDownloadClient.getBearerTokenProvider().get());
-    }
+  public void givenClientCallPasses_whenDownloadTupleShares_thenTupleListDownloaded() {
+    init();
+    protoUtils
+        .when(() -> Utils.createFromProtoTuplesListResponse(any(), any()))
+        .thenReturn(new TupleList(TupleType.class, TupleType.SQUARE_TUPLE_GF2N.getField()));
+    List<TupleList> response =
+        castorIntraVcpClient.downloadTupleShares(UUID.randomUUID(), TupleType.SQUARE_TUPLE_GF2N, 1);
+    Assert.assertNotNull(response);
+    close();
   }
 
-  @SneakyThrows
   @Test
-  void givenSuccessfulRequest_whenDownloadTripleShares_thenReturnExpectedContent() {
-    UUID requestId = UUID.fromString("3dc08ff2-5eed-49a9-979e-3a3ac0e4a2cf");
-    int expectedCount = 2;
-    TupleList<MultiplicationTriple<Field.Gfp>, Field.Gfp> expectedTripleList =
-        new TupleList(MultiplicationTriple.class, GFP);
-    expectedTripleList.add(new MultiplicationTriple(GFP, testShare, testShare, testShare));
-    expectedTripleList.add(new MultiplicationTriple(GFP, testShare, testShare, testShare));
-    CsResponseEntity<String, TupleList> givenResponseEntity =
-        CsResponseEntity.success(HttpStatus.SC_OK, expectedTripleList);
-    CastorServiceUri serviceUri = new CastorServiceUri(serviceAddress);
-
-    when(csHttpClientMock.getForEntity(
-            serviceUri.getIntraVcpRequestTuplesUri(
-                requestId, TupleType.MULTIPLICATION_TRIPLE_GFP, expectedCount),
-            Collections.emptyList(),
-            TupleList.class))
-        .thenReturn(givenResponseEntity);
-    TupleList actualTripleList =
-        castorIntraVcpClient.downloadTupleShares(
-            requestId, TupleType.MULTIPLICATION_TRIPLE_GFP, expectedCount);
-
-    assertEquals(expectedTripleList, actualTripleList);
+  public void givenClientCallFails_whenDownloadTupleShares_thenThrowCastorClientException() {
+    init();
+    Mockito.when(stub.getTupleList(any(GrpcTuplesListRequest.class)))
+        .thenThrow(new RuntimeException());
+    assertThrows(
+        CastorClientException.class,
+        () -> {
+          castorIntraVcpClient.downloadTupleShares(
+              UUID.randomUUID(), TupleType.SQUARE_TUPLE_GF2N, 1);
+        });
+    close();
   }
 
-  @SneakyThrows
   @Test
-  void givenRequestEmitsError_whenDownloadTripleShares_thenThrowCastorClientException() {
-    UUID requestId = UUID.fromString("3dc08ff2-5eed-49a9-979e-3a3ac0e4a2cf");
-    CsHttpClientException expectedCause = new CsHttpClientException("totally expected");
-    URI expectedUri = new CastorServiceUri(serviceAddress).getRestServiceUri();
-    when(csHttpClientMock.getForEntity(any(), eq(Collections.emptyList()), eq(TupleList.class)))
-        .thenThrow(expectedCause);
-    CastorClientException actualCce =
-        assertThrows(
-            CastorClientException.class,
-            () ->
-                castorIntraVcpClient.downloadTupleShares(
-                    requestId, TupleType.MULTIPLICATION_TRIPLE_GFP, 1));
-
-    assertEquals(
-        String.format(
-            FAILED_DOWNLOADING_TUPLES_EXCEPTION_MSG,
-            expectedUri.toString(),
-            expectedCause.getMessage()),
-        actualCce.getMessage());
-    assertEquals(expectedCause, actualCce.getCause());
+  public void givenClientCallPasses_whenFetchingTelemetryData_thenRetrieveTelemetryData() {
+    init();
+    protoUtils
+        .when(() -> Utils.convertFromProtoTelemetryData(any()))
+        .thenReturn(new TelemetryData(new ArrayList<>(), 10L));
+    TelemetryData response = castorIntraVcpClient.getTelemetryData();
+    assertNotNull(response);
+    close();
   }
 
-  @SneakyThrows
   @Test
-  void givenSuccessfulRequest_whenGetTelemetryData_thenReturnExpectedContent() {
-    TelemetryData expectedTelemetryData = new TelemetryData(new ArrayList<>(), 100);
-    CsResponseEntity<String, TelemetryData> responseEntity =
-        CsResponseEntity.success(HttpStatus.SC_OK, expectedTelemetryData);
-    when(csHttpClientMock.getForEntity(
-            new CastorServiceUri(serviceAddress).getIntraVcpTelemetryUri(),
-            Collections.emptyList(),
-            TelemetryData.class))
-        .thenReturn(responseEntity);
-    TelemetryData actualTelemetryData = castorIntraVcpClient.getTelemetryData();
-    assertEquals(expectedTelemetryData, actualTelemetryData);
+  public void givenClientCallFails_whenFetchingTelemetryData_thenThrowCastorClientException() {
+    init();
+    when(stub.getTelemetryData(any(GrpcTelemetryDataRequest.class)))
+        .thenThrow(new RuntimeException());
+    assertThrows(CastorClientException.class, () -> castorIntraVcpClient.getTelemetryData());
+    close();
   }
 
-  @SneakyThrows
   @Test
-  void givenRequestEmitsError_whenGetTelemetryData_thenThrowCastorClientException() {
-    CsHttpClientException expectedCause = new CsHttpClientException("totally expected");
-    CastorServiceUri serviceUri = new CastorServiceUri(serviceAddress);
-    when(csHttpClientMock.getForEntity(
-            serviceUri.getIntraVcpTelemetryUri(), Collections.emptyList(), TelemetryData.class))
-        .thenThrow(expectedCause);
-
-    CastorClientException actualCce =
-        assertThrows(CastorClientException.class, castorIntraVcpClient::getTelemetryData);
-
-    assertEquals(
-        String.format(
-            FAILED_FETCHING_TELEMETRY_DATA_EXCEPTION_MSG,
-            serviceUri.getRestServiceUri(),
-            expectedCause.getMessage()),
-        actualCce.getMessage());
-    assertEquals(expectedCause, actualCce.getCause());
+  public void givenClientCallPasses_whenActivateTupleChunk_thenDoNotThrowException() {
+    init();
+    when(stub.activateFragmentsForTupleChunk(any())).thenReturn(GrpcEmpty.newBuilder().build());
+    castorIntraVcpClient.activateTupleChunk(UUID.randomUUID());
+    close();
   }
 
-  @SneakyThrows
   @Test
-  void givenSuccessfulRequest_whenGetTelemetryDataWithInterval_thenReturnExpectedContent() {
-    long requestInterval = 50;
-    TelemetryData expectedTelemetryData = new TelemetryData(new ArrayList<>(), 100);
-    CsResponseEntity<String, TelemetryData> responseEntity =
-        CsResponseEntity.success(HttpStatus.SC_OK, expectedTelemetryData);
-    when(csHttpClientMock.getForEntity(
-            new CastorServiceUri(serviceAddress).getRequestTelemetryUri(requestInterval),
-            Collections.emptyList(),
-            TelemetryData.class))
-        .thenReturn(responseEntity);
-    TelemetryData actualTelemetryData = castorIntraVcpClient.getTelemetryData(requestInterval);
-    assertEquals(expectedTelemetryData, actualTelemetryData);
+  public void givenClientCallFails_whenActivateTupleChunk_thenThrowCastorClientException() {
+    init();
+    when(stub.activateFragmentsForTupleChunk(any())).thenThrow(new RuntimeException());
+    Assert.assertThrows(
+        CastorClientException.class,
+        () -> castorIntraVcpClient.activateTupleChunk(UUID.randomUUID()));
+    close();
   }
 
-  @SneakyThrows
   @Test
-  void givenRequestEmitsError_whenGetTelemetryDataWithInterval_thenThrowCastorClientException() {
-    long requestInterval = 50;
-    CsHttpClientException expectedCause = new CsHttpClientException("totally expected");
+  public void givenCallingClientPasses_whenUploadTupleChunk_thenReturnTrue() {
+    init();
+    TupleType tupleType = TupleType.BIT_GFP;
+    TupleChunk tupleChunk =
+        TupleChunk.of(tupleType.getTupleCls(), tupleType.getField(), UUID.randomUUID(), arr);
+    Mockito.doReturn(stub)
+        .when(stub)
+        .withDeadlineAfter(Mockito.anyLong(), Mockito.any(TimeUnit.class));
+    boolean result = castorIntraVcpClient.uploadTupleChunk(tupleChunk, 1000L);
+    Mockito.verify(stub).withDeadlineAfter(Mockito.eq(1000L), Mockito.eq(TimeUnit.MILLISECONDS));
+    assertTrue(result);
+    close();
+  }
 
-    CastorServiceUri castorServiceUri = new CastorServiceUri(serviceAddress);
-    when(csHttpClientMock.getForEntity(
-            castorServiceUri.getRequestTelemetryUri(requestInterval),
-            Collections.emptyList(),
-            TelemetryData.class))
-        .thenThrow(expectedCause);
-
-    CastorClientException actualCce =
-        assertThrows(
-            CastorClientException.class,
-            () -> castorIntraVcpClient.getTelemetryData(requestInterval));
-
-    assertEquals(
-        String.format(
-            FAILED_FETCHING_TELEMETRY_DATA_EXCEPTION_MSG,
-            castorServiceUri.getRestServiceUri(),
-            expectedCause.getMessage()),
-        actualCce.getMessage());
-    assertEquals(expectedCause, actualCce.getCause());
+  @Test
+  public void givenClientCallFails_whenUploadTupleChunk_thenReturnFalse() {
+    init();
+    TupleType tupleType = TupleType.BIT_GFP;
+    TupleChunk tupleChunk =
+        TupleChunk.of(tupleType.getTupleCls(), tupleType.getField(), UUID.randomUUID(), arr);
+    Mockito.doThrow(new RuntimeException())
+        .when(stub)
+        .withDeadlineAfter(Mockito.anyLong(), Mockito.any(TimeUnit.class));
+    assertFalse(castorIntraVcpClient.uploadTupleChunk(tupleChunk));
+    close();
   }
 }

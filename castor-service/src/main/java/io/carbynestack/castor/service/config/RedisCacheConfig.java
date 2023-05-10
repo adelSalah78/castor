@@ -33,7 +33,6 @@ public class RedisCacheConfig {
   public RedisTemplate<String, Object> redisTemplate(RedisConnectionFactory cf) {
     RedisTemplate<String, Object> redisTemplate = new RedisTemplate<>();
     redisTemplate.setKeySerializer(new StringRedisSerializer());
-    //    redisTemplate.setEnableTransactionSupport(true);
     redisTemplate.setConnectionFactory(cf);
     return redisTemplate;
   }

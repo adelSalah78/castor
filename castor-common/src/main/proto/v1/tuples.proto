@@ -1,0 +1,26 @@
+syntax = "proto3";
+package io.carbynestack.castor.common.grpc;
+
+option java_multiple_files = true;
+
+
+message GrpcTuplesListRequest{
+  string type = 1;
+  int64 count = 2;
+  string request_id = 3;
+}
+
+message GrpcShare {
+  bytes value = 1;
+  bytes mac = 2;
+}
+
+message GrpcResponsePayloadData {
+  repeated GrpcShare shares = 1;
+}
+
+message GrpcTuplesListResponse{
+  string tuples_field = 1;
+  string tuple_class = 2;
+  repeated GrpcResponsePayloadData grpc_tuples = 3;
+}

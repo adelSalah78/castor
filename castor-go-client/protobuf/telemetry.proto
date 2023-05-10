@@ -1,0 +1,19 @@
+syntax = "proto3";
+package io.carbynestack.castor.common.grpc;
+
+option go_package = "common.grpc";
+
+message GrpcTelemetryDataRequest {
+  int64 request_interval = 1;
+}
+
+message GrpcTelemetryDataResponse {
+  repeated GrpcTupleMetric metrics = 1;
+  int64 interval = 2;
+}
+
+message GrpcTupleMetric {
+  int64 available = 1;
+  int64 consumption_rate = 2;
+  string tuple_type = 3;
+}

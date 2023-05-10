@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021 - for information on the respective copyright owner
+ * Copyright (c) 2021-2023 - for information on the respective copyright owner
  * see the NOTICE file and/or the repository https://github.com/carbynestack/castor.
  *
  * SPDX-License-Identifier: Apache-2.0
@@ -77,7 +77,7 @@ public class TupleList<T extends Tuple<T, F>, F extends Field> extends ArrayList
    * @return A {@link TupleChunk} containing the tuples from this {@link TupleList}
    * @throws IOException in case of I/O errors
    */
-  public final TupleChunk<T, F> asChunk(UUID uuid) throws IOException {
+  public final TupleChunk<T, F> asChunk(UUID uuid) {
     ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
     this.forEach(
         tuple -> {

@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2021 - for information on the respective copyright owner
+# Copyright (c) 2021-2023 - for information on the respective copyright owner
 # see the NOTICE file and/or the repository https://github.com/carbynestack/castor.
 #
 # SPDX-License-Identifier: Apache-2.0
@@ -32,3 +32,15 @@ repos:
     hooks:
       - id: markdownlint
         exclude: ^.*/vendor/.*|.*/3RD-PARTY-LICENSES/.*|castor-service/charts/castor/README.md$
+
+  - repo: https://github.com/yoheimuta/protolint
+    rev: v0.43.1
+    hooks:
+      - id: protolint
+        args: [-fix]
+        config:
+          disabled_rules:
+            - ENUM_FIELD_NAMES_PREFIX
+            - ENUM_FIELD_NAMES_UPPER_SNAKE_CASE
+            - ENUM_FIELD_NAMES_ZERO_VALUE_END_WITH
+            - ENUM_NAMES_UPPER_CAMEL_CASE

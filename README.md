@@ -18,16 +18,15 @@ Please have a look at the underlying modules for more information on how to run
 a Castor service and how to interact with it using the provided Java clients:
 
 - [Castor Common](castor-common) - A shared library of commonly used
-  functionality.
+  functionality. It also contains the protobuf message and service definitions
+  for gRPC APIs
 - [Castor Service](castor-service) - The microservice implementing the backend
   storage facilities for tuples.
 - [Castor Java Client](castor-java-client) - A Java client library to interact
-  with a Castor service over its REST API. The module provides client
-  implementations to communicate
+  with a Castor service and upload pre-generated tuples over its gRPC API. The
+  module provides client implementations to communicate
   - with the Castor service within a Virtual Cloud Provider.
   - across Castor services participating in a Virtual Cloud.
-- [Castor Java Upload Client](castor-upload-java-client) - A Java client used to
-  upload pre-generated tuples using Castor's WebSocket interface.
 
 > :bulb: **NOTE**\
 > _Castor_ is only used to manage tuples in a Carbyne Stack

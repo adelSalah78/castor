@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 - for information on the respective copyright owner
+ * Copyright (c) 2022-2023 - for information on the respective copyright owner
  * see the NOTICE file and/or the repository https://github.com/carbynestack/castor.
  *
  * SPDX-License-Identifier: Apache-2.0
@@ -13,12 +13,12 @@ import io.carbynestack.castor.common.exceptions.CastorServiceException;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
-import javax.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.Assert;
 
 @Slf4j
 @Service
@@ -43,8 +43,9 @@ public class TupleChunkFragmentStorageService {
    *     TupleChunkFragmentEntity} is already covered by another {@link TupleChunkFragmentEntity}.
    */
   @Transactional
-  public TupleChunkFragmentEntity keep(@NotNull TupleChunkFragmentEntity fragment)
+  public TupleChunkFragmentEntity keep(TupleChunkFragmentEntity fragment)
       throws CastorClientException {
+    Assert.notNull(fragment, "Tuple Chunk Fragment Entity must not be null!");
     checkNoConflict(fragment.getTupleChunkId(), fragment.getStartIndex(), fragment.getEndIndex());
     return fragmentRepository.save(fragment);
   }
@@ -58,7 +59,8 @@ public class TupleChunkFragmentStorageService {
    *     TupleChunkFragmentEntity} is already covered by another {@link TupleChunkFragmentEntity}.
    */
   @Transactional
-  public void keep(@NotNull List<TupleChunkFragmentEntity> fragments) throws CastorClientException {
+  public void keep(List<TupleChunkFragmentEntity> fragments) throws CastorClientException {
+    Assert.notNull(fragments, "Tuple chunks fragments can not be null");
     for (TupleChunkFragmentEntity fragment : fragments) {
       checkNoConflict(fragment.getTupleChunkId(), fragment.getStartIndex(), fragment.getEndIndex());
     }

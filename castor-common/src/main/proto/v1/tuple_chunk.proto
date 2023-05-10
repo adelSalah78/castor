@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package io.carbynestack.castor.common.grpc;
+
+import "common.proto";
+
+option java_multiple_files = true;
+
+message GrpcTupleChunkRequest{
+  string chunk_id = 1;
+}

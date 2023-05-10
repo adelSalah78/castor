@@ -1,16 +1,14 @@
 /*
- * Copyright (c) 2021 - for information on the respective copyright owner
+ * Copyright (c) 2021-2023 - for information on the respective copyright owner
  * see the NOTICE file and/or the repository https://github.com/carbynestack/castor.
  *
  * SPDX-License-Identifier: Apache-2.0
  */
 package io.carbynestack.castor.client.download;
 
-import io.carbynestack.castor.common.entities.TelemetryData;
-import io.carbynestack.castor.common.entities.Tuple;
-import io.carbynestack.castor.common.entities.TupleList;
-import io.carbynestack.castor.common.entities.TupleType;
+import io.carbynestack.castor.common.entities.*;
 import io.carbynestack.castor.common.exceptions.CastorClientException;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -21,6 +19,9 @@ import java.util.UUID;
  * seconds)..
  */
 public interface CastorIntraVcpClient {
+
+  /** Default connection timeout for gRPC connections to a castor service in milliseconds. */
+  long DEFAULT_CONNECTION_TIMEOUT = 60000L;
 
   /**
    * Retrieves a requested amount of {@link Tuple}s from the Castor Service using a pre-defined
@@ -33,7 +34,7 @@ public interface CastorIntraVcpClient {
    * @throws CastorClientException if composing the request tuples URI failed
    * @throws CastorClientException if download the tuples from the service failed
    */
-  TupleList downloadTupleShares(UUID requestId, TupleType tupleType, long count);
+  List<TupleList> downloadTupleShares(UUID requestId, TupleType tupleType, long count);
 
   /**
    * Retrieves latest telemetry data with an interval preconfigured in castor.
@@ -53,4 +54,41 @@ public interface CastorIntraVcpClient {
    * @throws CastorClientException if retrieving the telemetry metrics failed
    */
   TelemetryData getTelemetryData(long interval);
+
+  /**
+   * Uploads a {@link TupleChunk} to castor using a gRPC connection and wait until for upload to
+   * complete or the {@link CastorIntraVcpClient#DEFAULT_CONNECTION_TIMEOUT} to be elapsed.
+   *
+   * @param tupleChunk The {@link TupleChunk} to upload
+   * @return <CODE>true</CODE> when upload was successful or <CODE>false</CODE> if not
+   * @throws IllegalArgumentException if number of tuples in the given chunk exceed the maximum
+   *     number of allowed tuples per chunk
+   * @throws CastorClientException if the gRPC connection has not been established or error happened
+   *     in processing request
+   */
+  boolean uploadTupleChunk(TupleChunk tupleChunk) throws CastorClientException;
+
+  /**
+   * Uploads a {@link TupleChunk} to castor using a gRPC connection and wait until for upload to
+   * complete or a given timeout to be elapsed.
+   *
+   * @param tupleChunk The {@link TupleChunk} to upload
+   * @param timeout the maximum time in milliseconds to wait for the {@link TupleChunk }to be
+   *     uploaded
+   * @return <CODE>true</CODE> when upload was successful or <CODE>false</CODE> if not
+   * @throws IllegalArgumentException if number of tuples in the given chunk exceed the maximum
+   *     number of allowed tuples per chunk
+   * @throws CastorClientException if the gRPC connection has not been established or error happened
+   *     in processing request
+   */
+  boolean uploadTupleChunk(TupleChunk tupleChunk, long timeout) throws CastorClientException;
+
+  /**
+   * Activates a {@link TupleChunk} by setting its linked {@link ActivationStatus} to {@link
+   * ActivationStatus#UNLOCKED}.
+   *
+   * @param tupleChunkId Unique identifier of the {@link TupleChunk} that should be activated.
+   * @throws CastorClientException if the communication with the CastorService failed.
+   */
+  void activateTupleChunk(UUID tupleChunkId);
 }

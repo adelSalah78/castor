@@ -1,29 +1,24 @@
 /*
- * Copyright (c) 2021 - for information on the respective copyright owner
+ * Copyright (c) 2021-2023 - for information on the respective copyright owner
  * see the NOTICE file and/or the repository https://github.com/carbynestack/castor.
  *
  * SPDX-License-Identifier: Apache-2.0
  */
 package io.carbynestack.castor.client.download;
 
+import static io.carbynestack.castor.common.entities.TelemetryData.DEFAULT_REQUEST_INTERVAL;
 import static java.util.Collections.singletonList;
 
-import io.carbynestack.castor.common.BearerTokenProvider;
-import io.carbynestack.castor.common.CastorServiceUri;
-import io.carbynestack.castor.common.entities.InputMask;
-import io.carbynestack.castor.common.entities.TelemetryData;
-import io.carbynestack.castor.common.entities.TupleList;
-import io.carbynestack.castor.common.entities.TupleType;
+import com.google.protobuf.ByteString;
+import io.carbynestack.castor.common.entities.*;
+import io.carbynestack.castor.common.entities.TupleChunk;
 import io.carbynestack.castor.common.exceptions.CastorClientException;
-import io.carbynestack.httpclient.BearerTokenUtils;
-import io.carbynestack.httpclient.CsHttpClient;
-import io.carbynestack.httpclient.CsHttpClientException;
-import io.vavr.control.Option;
-import io.vavr.control.Try;
+import io.carbynestack.castor.common.grpc.*;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
+import javax.net.ssl.SSLException;
 import lombok.Value;
-import org.apache.http.Header;
 
 /**
  * The default implementation of a {@link CastorIntraVcpClient}. It can be used to download {@link
@@ -36,90 +31,67 @@ public class DefaultCastorIntraVcpClient implements CastorIntraVcpClient {
       "Failed downloading tuples from service %s: %s";
   public static final String FAILED_FETCHING_TELEMETRY_DATA_EXCEPTION_MSG =
       "Failed fetching telemetry data from service %s: %s";
-  CsHttpClient<String> csHttpClient;
-  CastorServiceUri serviceUri;
-  Option<BearerTokenProvider> bearerTokenProvider;
+
+  static final String ERROR_ACTIVATING_TUPLE_CHUNK =
+      "Error while activating tuple chunk with chunk id %s";
+
+  IntraServiceGrpc.IntraServiceBlockingStub stub;
 
   /**
-   * Creates a new {@link DefaultCastorIntraVcpClient} with the specified {@link Builder}
-   * configuration
-   *
-   * <p>The client is capable to communicate with the given services using either http or https,
-   * according to the scheme defined by the give url. In addition trustworthy SSL certificates can
-   * be defined to allow secure communication with services that provide self-signed certificates or
-   * ssl certificate validation can be disabled.
+   * The client is capable to communicate with the given services using gRPC, according to the
+   * scheme defined by the give url. In addition trustworthy SSL certificates can be defined to
+   * allow secure communication with services that provide self-signed certificates or ssl
+   * certificate validation can be disabled.
    *
    * @param builder An {@link Builder} object containing the client's configuration.
-   * @throws CastorClientException if internal {@link CsHttpClient} could not be build
+   * @throws CastorClientException if an SSLException occurs while building the gRPC client
    */
-  private DefaultCastorIntraVcpClient(Builder builder) {
-    this(
-        builder,
-        Try.of(
-                () -> {
-                  try {
-                    return CsHttpClient.<String>builder()
-                        .withFailureType(String.class)
-                        .withoutSslValidation(builder.noSslValidation)
-                        .withTrustedCertificates(builder.trustedCertificates)
-                        .build();
-                  } catch (CsHttpClientException chce) {
-                    throw new CastorClientException("Failed to create CsHttpClient.", chce);
-                  }
-                })
-            .get());
+  public DefaultCastorIntraVcpClient(Builder builder) {
+    try {
+      stub = buildIntraGrpcClient(builder);
+    } catch (SSLException e) {
+      throw new CastorClientException("Error creating gRPC client: " + e.getMessage());
+    }
   }
 
-  /**
-   * Creates a new {@link DefaultCastorIntraVcpClient} with the specified {@link Builder}
-   * configuration and a given {@link CsHttpClient}.
-   *
-   * <p>The client is capable to communicate with the given services using either http or https,
-   * according to the scheme defined by the give url. In addition trustworthy SSL certificates can
-   * be defined to allow secure communication with services that provide self-signed certificates or
-   * ssl certificate validation can be disabled.
-   *
-   * @param builder An {@link Builder} object containing the client's configuration.
-   * @param csHttpClient The {@link CsHttpClient} used for communication with the service.
-   */
-  DefaultCastorIntraVcpClient(Builder builder, CsHttpClient<String> csHttpClient) {
-    this.serviceUri = builder.serviceUris.get(0);
-    this.bearerTokenProvider = Option.of(builder.bearerTokenProvider);
-    this.csHttpClient = csHttpClient;
+  /*for passing stubs from unit test*/
+  public DefaultCastorIntraVcpClient(IntraServiceGrpc.IntraServiceBlockingStub stub) {
+    this.stub = stub;
+  }
+
+  private IntraServiceGrpc.IntraServiceBlockingStub buildIntraGrpcClient(Builder builder)
+      throws SSLException {
+    return IntraServiceGrpc.newBlockingStub(Utils.createGrpcChannel(builder.serviceUris.get(0)));
   }
 
   @Override
-  public TupleList downloadTupleShares(UUID requestId, TupleType tupleType, long count) {
+  public List<TupleList> downloadTupleShares(UUID requestId, TupleType tupleType, long count) {
     try {
-      return csHttpClient
-          .getForEntity(
-              serviceUri.getIntraVcpRequestTuplesUri(requestId, tupleType, count),
-              getHeaders(serviceUri),
-              TupleList.class)
-          .get();
-    } catch (CsHttpClientException chce) {
+      GrpcTuplesListRequest request =
+          GrpcTuplesListRequest.newBuilder()
+              .setRequestId(requestId.toString())
+              .setCount(count)
+              .setType(tupleType.name())
+              .build();
+      return Utils.createFromProtoTuplesListResponse(stub.getTupleList(request), tupleType.name());
+    } catch (Exception e) {
       throw new CastorClientException(
-          String.format(
-              FAILED_DOWNLOADING_TUPLES_EXCEPTION_MSG,
-              serviceUri.getRestServiceUri(),
-              chce.getMessage()),
-          chce);
+          String.format(FAILED_DOWNLOADING_TUPLES_EXCEPTION_MSG, "Grpc", e.getMessage()), e);
     }
   }
 
   @Override
   public TelemetryData getTelemetryData() {
     try {
-      return csHttpClient
-          .getForEntity(
-              serviceUri.getIntraVcpTelemetryUri(), getHeaders(serviceUri), TelemetryData.class)
-          .get();
-    } catch (CsHttpClientException chce) {
+      GrpcTelemetryDataRequest request =
+          GrpcTelemetryDataRequest.newBuilder()
+              .setRequestInterval(DEFAULT_REQUEST_INTERVAL.getSeconds())
+              .build();
+      return Utils.convertFromProtoTelemetryData(stub.getTelemetryData(request));
+    } catch (Exception chce) {
       throw new CastorClientException(
           String.format(
-              FAILED_FETCHING_TELEMETRY_DATA_EXCEPTION_MSG,
-              serviceUri.getRestServiceUri(),
-              chce.getMessage()),
+              FAILED_FETCHING_TELEMETRY_DATA_EXCEPTION_MSG, "TelemetryService", chce.getMessage()),
           chce);
     }
   }
@@ -127,39 +99,61 @@ public class DefaultCastorIntraVcpClient implements CastorIntraVcpClient {
   @Override
   public TelemetryData getTelemetryData(long interval) {
     try {
-      return csHttpClient
-          .getForEntity(
-              serviceUri.getRequestTelemetryUri(interval),
-              getHeaders(serviceUri),
-              TelemetryData.class)
-          .get();
-    } catch (CsHttpClientException chce) {
+      GrpcTelemetryDataRequest request =
+          GrpcTelemetryDataRequest.newBuilder().setRequestInterval(interval).build();
+      return Utils.convertFromProtoTelemetryData(stub.getTelemetryData(request));
+    } catch (Exception chce) {
       throw new CastorClientException(
           String.format(
-              FAILED_FETCHING_TELEMETRY_DATA_EXCEPTION_MSG,
-              serviceUri.getRestServiceUri(),
-              chce.getMessage()),
+              FAILED_FETCHING_TELEMETRY_DATA_EXCEPTION_MSG, "TelemetryService", chce.getMessage()),
           chce);
     }
   }
 
-  private List<Header> getHeaders(CastorServiceUri uri) {
-    return bearerTokenProvider
-        .map(p -> BearerTokenUtils.createBearerToken(p.apply(uri)))
-        .toJavaList();
+  @Override
+  public boolean uploadTupleChunk(TupleChunk tupleChunk) throws CastorClientException {
+    return uploadTupleChunk(tupleChunk, DEFAULT_CONNECTION_TIMEOUT);
+  }
+
+  @Override
+  public boolean uploadTupleChunk(TupleChunk tupleChunk, long timeout)
+      throws CastorClientException {
+    try {
+      GrpcUploadTupleChunkRequest request =
+          GrpcUploadTupleChunkRequest.newBuilder()
+              .setChunkId(tupleChunk.getChunkId().toString())
+              .setTupleType(tupleChunk.getTupleType().name())
+              .setTuples(ByteString.copyFrom(tupleChunk.getTuples()))
+              .build();
+      stub.withDeadlineAfter(timeout, TimeUnit.MILLISECONDS).uploadTupleChunk(request);
+      return true;
+    } catch (Exception e) {
+      e.printStackTrace();
+      return false;
+    }
+  }
+
+  @Override
+  public void activateTupleChunk(UUID tupleChunkId) {
+    try {
+      GrpcTupleChunkRequest request =
+          GrpcTupleChunkRequest.newBuilder().setChunkId(tupleChunkId.toString()).build();
+      stub.activateFragmentsForTupleChunk(request);
+    } catch (Exception e) {
+      throw new CastorClientException(
+          String.format(ERROR_ACTIVATING_TUPLE_CHUNK, tupleChunkId.toString()), e);
+    }
   }
 
   /**
    * Create a new {@link DefaultCastorIntraVcpClient.Builder} to easily configure and create a new
    * {@link DefaultCastorIntraVcpClient}.
    *
-   * @param serviceAddress Address of the service the new {@link DefaultCastorIntraVcpClient} should
-   *     communicate with.
    * @throws IllegalArgumentException if the given service addresses is null, empty, or cannot be
-   *     parsed as {@link CastorServiceUri}s
+   *     parsed
    */
-  public static Builder builder(String serviceAddress) {
-    return new Builder(serviceAddress);
+  public static Builder builder(String castorServiceUri) {
+    return new Builder(castorServiceUri);
   }
 
   /** Builder class to create a new {@link DefaultCastorIntraVcpClient}. */
@@ -169,13 +163,13 @@ public class DefaultCastorIntraVcpClient implements CastorIntraVcpClient {
      * Create a new {@link DefaultCastorIntraVcpClient.Builder} to easily configure and create a new
      * {@link DefaultCastorIntraVcpClient}.
      *
-     * @param serviceAddress Address of the service the new {@link DefaultCastorIntraVcpClient}
-     *     should communicate with.
+     * @param castorServiceUri gRPC Address of the service the new {@link
+     *     DefaultCastorIntraVcpClient} should communicate with.
      * @throws IllegalArgumentException if the given service addresses is null, empty, or cannot be
-     *     parsed as {@link CastorServiceUri}s
+     *     parsed
      */
-    private Builder(String serviceAddress) {
-      super(singletonList(serviceAddress));
+    private Builder(String castorServiceUri) {
+      super(singletonList(castorServiceUri));
     }
 
     @Override

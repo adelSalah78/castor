@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023 - for information on the respective copyright owner
+ * Copyright (c) 2022-2023 - for information on the respective copyright owner
  * see the NOTICE file and/or the repository https://github.com/carbynestack/castor.
  *
  * SPDX-License-Identifier: Apache-2.0
@@ -7,8 +7,7 @@
 
 package io.carbynestack.castor.service.persistence;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.springframework.boot.test.context.SpringBootTest.WebEnvironment.RANDOM_PORT;
+import static org.junit.Assert.assertEquals;
 
 import io.carbynestack.castor.common.entities.ActivationStatus;
 import io.carbynestack.castor.common.entities.Reservation;
@@ -27,15 +26,16 @@ import java.util.Collections;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.runner.RunWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
-@SpringBootTest(
-    webEnvironment = RANDOM_PORT,
-    classes = {CastorServiceApplication.class})
+@RunWith(SpringJUnit4ClassRunner.class)
+@SpringBootTest(classes = {CastorServiceApplication.class})
 @ActiveProfiles("test")
 @Testcontainers
 public class ConcurrencyIT {

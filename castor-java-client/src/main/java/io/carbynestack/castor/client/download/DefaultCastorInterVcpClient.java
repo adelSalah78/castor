@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021 - for information on the respective copyright owner
+ * Copyright (c) 2021-2023 - for information on the respective copyright owner
  * see the NOTICE file and/or the repository https://github.com/carbynestack/castor.
  *
  * SPDX-License-Identifier: Apache-2.0
@@ -7,18 +7,14 @@
 
 package io.carbynestack.castor.client.download;
 
-import io.carbynestack.castor.common.BearerTokenProvider;
-import io.carbynestack.castor.common.CastorServiceUri;
 import io.carbynestack.castor.common.entities.ActivationStatus;
 import io.carbynestack.castor.common.entities.Reservation;
+import io.carbynestack.castor.common.entities.Utils;
 import io.carbynestack.castor.common.exceptions.CastorClientException;
-import io.carbynestack.httpclient.CsHttpClient;
-import io.carbynestack.httpclient.CsHttpClientException;
-import io.carbynestack.httpclient.CsResponseEntity;
-import io.vavr.control.Option;
-import io.vavr.control.Try;
-import java.net.URI;
+import io.carbynestack.castor.common.grpc.*;
+import java.util.ArrayList;
 import java.util.List;
+import javax.net.ssl.SSLException;
 import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
 
@@ -29,106 +25,67 @@ public class DefaultCastorInterVcpClient implements CastorInterVcpClient {
       "Failed sharing Reservation.";
   public static final String FAILED_UPDATING_RESERVATION_EXCEPTION_MSG =
       "Failed sending reservation update.";
-  CsHttpClient<String> csHttpClient;
-  List<CastorServiceUri> serviceUris;
-  Option<BearerTokenProvider> bearerTokenProvider;
 
-  /**
-   * Creates a new {@link DefaultCastorInterVcpClient} with the specified {@link Builder}
-   * configuration
-   *
-   * <p>The client is capable to communicate with the given services using either http or https,
-   * according to the scheme defined by the give url. In addition trustworthy SSL certificates can
-   * be defined to allow secure communication with services that provide self-signed certificates or
-   * ssl certificate validation can be disabled.
-   *
-   * @param builder An {@link Builder} object containing the client's configuration.
-   * @throws CastorClientException if internal {@link CsHttpClient} could not be build
-   */
-  private DefaultCastorInterVcpClient(Builder builder) {
-    this(
-        builder,
-        Try.of(
-                () -> {
-                  try {
-                    return CsHttpClient.<String>builder()
-                        .withFailureType(String.class)
-                        .withoutSslValidation(builder.noSslValidation)
-                        .withTrustedCertificates(builder.trustedCertificates)
-                        .build();
-                  } catch (CsHttpClientException chce) {
-                    throw new CastorClientException("Failed to create CsHttpClient.", chce);
-                  }
-                })
-            .get());
-  }
+  List<InterServiceGrpc.InterServiceBlockingStub> stubs;
 
-  /**
-   * Creates a new {@link DefaultCastorInterVcpClient} with the specified {@link Builder}
-   * configuration and a given {@link CsHttpClient}.
-   *
-   * <p>The client is capable to communicate with the given services using either http or https,
-   * according to the scheme defined by the give url. In addition trustworthy SSL certificates can
-   * be defined to allow secure communication with services that provide self-signed certificates or
-   * ssl certificate validation can be disabled.
-   *
-   * @param builder An {@link Builder} object containing the client's configuration.
-   * @param csHttpClient The {@link CsHttpClient} used for communication with the service.
-   */
-  DefaultCastorInterVcpClient(Builder builder, CsHttpClient<String> csHttpClient) {
-    this.serviceUris = builder.serviceUris;
-    this.bearerTokenProvider = Option.of(builder.bearerTokenProvider);
-    this.csHttpClient = csHttpClient;
+  public DefaultCastorInterVcpClient(Builder builder) {
+    this.stubs = new ArrayList<>(builder.serviceUris.size());
+    builder.serviceUris.forEach(
+        address -> {
+          try {
+            this.stubs.add(createStub(address, builder));
+          } catch (SSLException e) {
+            throw new CastorClientException(
+                "Exception initiating one of the gRPC clients: " + e.getMessage());
+          }
+        });
   }
 
   @Override
   public boolean shareReservation(Reservation reservation) {
     boolean result = true;
     log.debug("Sharing reservation {}", reservation);
-
+    GrpcReservation request = Utils.convertToProtoReservation(reservation);
     try {
-      for (CastorServiceUri serviceUri : serviceUris) {
-        log.debug("\twith {}", serviceUri.toString());
-        CsResponseEntity<String, String> response =
-            csHttpClient.postForEntity(
-                serviceUri.getInterVcpReservationUri(), reservation, String.class);
-        if (response.isFailure()) {
-          log.debug(
-              "Slave ({}) returned failure for shared reservation: {}",
-              serviceUri,
-              response.getError());
+      for (int i = 0; i < stubs.size(); i++) {
+        GrpcEmpty response = stubs.get(i).keepAndApplyReservation(request);
+        if (response == null) {
+          log.debug("Failed to share reservation");
           result = false;
+          break;
         }
       }
       return result;
-    } catch (CsHttpClientException chce) {
-      throw new CastorClientException(FAILED_SHARING_RESERVATION_EXCEPTION_MSG, chce);
+    } catch (Exception e) {
+      throw new CastorClientException(FAILED_SHARING_RESERVATION_EXCEPTION_MSG, e);
     }
   }
 
   @Override
   public void updateReservationStatus(String reservationId, ActivationStatus status) {
     try {
-      for (CastorServiceUri serviceUri : serviceUris) {
-        URI requestUri = serviceUri.getInterVcpUpdateReservationUri(reservationId);
+      GrpcUpdateReservationRequest request =
+          GrpcUpdateReservationRequest.newBuilder()
+              .setReservationId(reservationId)
+              .setActivationStatus(GrpcActivationStatus.valueOf(status.name()))
+              .build();
+      for (int i = 0; i < stubs.size(); i++) {
         log.debug("Sending reservation update for reservation #{}: {}", reservationId, status);
-        csHttpClient.put(requestUri, status);
+        GrpcEmpty response = stubs.get(i).updateReservation(request);
+        if (response == null) {
+          log.debug("Grp call to update reservation failed");
+        }
       }
-    } catch (CsHttpClientException chce) {
-      throw new CastorClientException(FAILED_UPDATING_RESERVATION_EXCEPTION_MSG, chce);
+    } catch (Exception e) {
+      throw new CastorClientException(FAILED_UPDATING_RESERVATION_EXCEPTION_MSG, e);
     }
   }
 
-  /**
-   * Create a new {@link Builder} to easily configure and create a new {@link
-   * DefaultCastorInterVcpClient}.
-   *
-   * @param serviceAddresses Addresses of the service(s) the new {@link DefaultCastorInterVcpClient}
-   *     should communicate with.
-   * @throws NullPointerException if given serviceAddresses is null
-   * @throws IllegalArgumentException if a single service address is null or cannot be parsed as
-   *     {@link CastorServiceUri}s
-   */
+  static InterServiceGrpc.InterServiceBlockingStub createStub(String address, Builder builder)
+      throws SSLException {
+    return InterServiceGrpc.newBlockingStub(Utils.createGrpcChannel(address));
+  }
+
   public static Builder builder(List<String> serviceAddresses) {
     return new Builder(serviceAddresses);
   }
@@ -143,8 +100,7 @@ public class DefaultCastorInterVcpClient implements CastorInterVcpClient {
      * @param serviceAddresses Addresses of the service(s) the new {@link
      *     DefaultCastorInterVcpClient} should communicate with.
      * @throws NullPointerException if given serviceAddresses is null
-     * @throws IllegalArgumentException if a single service address is null or cannot be parsed as
-     *     {@link CastorServiceUri}s
+     * @throws IllegalArgumentException if a single service address is null or cannot be parsed
      */
     private Builder(List<String> serviceAddresses) {
       super(serviceAddresses);
