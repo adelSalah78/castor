@@ -234,11 +234,7 @@ public class Utils {
   }
 
   public static Channel createGrpcChannel(String castorServiceUri) {
-    String[] addressAndPort = castorServiceUri.split(":");
-    String grpcClientAddress = addressAndPort[0];
-    String grpcClientPort = addressAndPort[1];
-    return ManagedChannelBuilder.forAddress(grpcClientAddress, Integer.parseInt(grpcClientPort))
-        .usePlaintext()
-        .build();
+    System.out.println("Service uri: " + castorServiceUri);
+    return ManagedChannelBuilder.forTarget(castorServiceUri).usePlaintext().build();
   }
 }
